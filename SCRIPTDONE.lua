@@ -2,9 +2,9 @@ local HttpService = game:GetService("HttpService")
 
 local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/NeymarScripts/BlockSpin-Script-Premium-/refs/heads/main/BlockSpin%20Premium"))()
 
--- Substitua pelo link do seu pastebin
-local pastebinURL = "https://pastebin.com/t6XaYbhW"
+local pastebinURL = "https://pastebin.com/raw/SEU_CODIGO" -- Substitua aqui com seu raw link
 
+-- Função para verificar se a chave está na lista
 local function verificarChave(chaveInserida)
 	local sucesso, resposta = pcall(function()
 		return HttpService:GetAsync(pastebinURL)
@@ -21,7 +21,7 @@ local function verificarChave(chaveInserida)
 	return false
 end
 
--- Interface com Rayfield
+-- Criar GUI com Rayfield
 local Window = Rayfield:CreateWindow({
 	Name = "Sistema de Key",
 	LoadingTitle = "Validando...",
@@ -46,8 +46,10 @@ Tab:CreateButton({
 	Callback = function()
 		local chave = keyInput.Text
 		if verificarChave(chave) then
-			Rayfield:Notify("Sucesso", "Chave válida! Acesso liberado.", 3)
-			-- Aqui você pode carregar o conteúdo premium
+			Rayfield:Notify("Sucesso", "Chave válida! Carregando script premium...", 3)
+			
+			-- SOMENTE AQUI carregamos o script premium!
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/NeymarScripts/BlockSpin-Script-Premium-/refs/heads/main/BlockSpin%20Premium"))()
 		else
 			Rayfield:Notify("Erro", "Chave inválida!", 3)
 		end
