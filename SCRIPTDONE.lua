@@ -55,3 +55,6 @@ Tab:CreateButton({
 		end
 	end,
 })
+
+-- Forçar a exibição da interface
+Window:Render() -- Tente adicionar isso
