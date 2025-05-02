@@ -1,148 +1,181 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local localPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local camera = workspace.CurrentCamera
 
--- Toggles
+local localPlayer = Players.LocalPlayer
+local toggleRemote = ReplicatedStorage:WaitForChild("ToggleData")
+local savedToggles = toggleRemote:InvokeServer("load")
+
+-- === Variáveis gerais ===
 local ESPEnabled = true
 local showName = true
 local showDistance = true
 local showTracers = true
 local showBox = true
+local rainbowMode = false
+local colorByTeam = true
 
--- UI Setup
-local gui = Instance.new("ScreenGui", localPlayer:WaitForChild("PlayerGui"))
-gui.Name = "OrionESPUI"
-gui.ResetOnSpawn = false
+-- === Função para cor rainbow ===
+local function getRainbowColor(offset)
+	local hue = (tick() * 0.5 + offset) % 1
+	return Color3.fromHSV(hue, 1, 1)
+end
 
-local mainFrame = Instance.new("Frame", gui)
-mainFrame.Size = UDim2.new(0, 200, 0, 250)
-mainFrame.Position = UDim2.new(0, 10, 0.3, 0)
+-- === Função de criação de caixa wireframe ===
+local function createWireBox(player, root)
+	local corners = {
+		Vector3.new(2, 3, 1),   Vector3.new(-2, 3, 1),
+		Vector3.new(2, -3, 1),  Vector3.new(-2, -3, 1),
+		Vector3.new(2, 3, -1),  Vector3.new(-2, 3, -1),
+		Vector3.new(2, -3, -1), Vector3.new(-2, -3, -1)
+	}
+	local edges = {
+		{1, 2}, {1, 3}, {2, 4}, {3, 4},
+		{5, 6}, {5, 7}, {6, 8}, {7, 8},
+		{1, 5}, {2, 6}, {3, 7}, {4, 8}
+	}
+	local attachments = {}
+	for i, offset in ipairs(corners) do
+		local a = Instance.new("Attachment")
+		a.Position = offset
+		a.Name = "WirePoint"
+		a.Parent = root
+		attachments[i] = a
+	end
+	for i, pair in ipairs(edges) do
+		local line = Instance.new("LineHandleAdornment")
+		line.Attachment0 = attachments[pair[1]]
+		line.Attachment1 = attachments[pair[2]]
+		line.Thickness = 0.1
+		line.Transparency = 0
+		line.AlwaysOnTop = true
+		line.ZIndex = 1
+		line.Name = "ESPWire"
+		line.Parent = game:GetService("CoreGui")
+
+		if rainbowMode then
+			line.Color3 = getRainbowColor(i)
+			RunService.RenderStepped:Connect(function()
+				if line and line.Parent then
+					line.Color3 = getRainbowColor(i)
+				end
+			end)
+		elseif colorByTeam then
+			line.Color3 = player.TeamColor.Color
+		else
+			line.Color3 = Color3.fromRGB(255, 0, 0)
+		end
+	end
+end
+
+-- === Atualização de ESP por jogador ===
+local function createESP(player)
+	player.CharacterAdded:Connect(function(char)
+		char:WaitForChild("HumanoidRootPart")
+		char:WaitForChild("Humanoid")
+
+		local root = char:FindFirstChild("HumanoidRootPart")
+		if not root then return end
+
+		if showBox then createWireBox(player, root) end
+	end)
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+	if p ~= localPlayer then
+		createESP(p)
+	end
+end
+
+Players.PlayerAdded:Connect(function(p)
+	if p ~= localPlayer then
+		createESP(p)
+	end
+end)
+
+-- === GUI Orion Estilo ===
+local screenGui = Instance.new("ScreenGui", localPlayer:WaitForChild("PlayerGui"))
+screenGui.Name = "ESPMenu"
+screenGui.ResetOnSpawn = false
+
+local mainFrame = Instance.new("Frame", screenGui)
+mainFrame.Size = UDim2.new(0, 200, 0, 330)
+mainFrame.Position = UDim2.new(0, 50, 0, 100)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
 
-local title = Instance.new("TextLabel", mainFrame)
-title.Size = UDim2.new(1, 0, 0, 30)
-title.Text = "ESP MENU"
-title.TextColor3 = Color3.new(1, 1, 1)
-title.BackgroundTransparency = 1
-title.Font = Enum.Font.SourceSansBold
-title.TextScaled = true
+-- Abas
+local visualTabBtn = Instance.new("TextButton", mainFrame)
+visualTabBtn.Size = UDim2.new(0.5, 0, 0, 25)
+visualTabBtn.Position = UDim2.new(0, 0, 0, 30)
+visualTabBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+visualTabBtn.Text = "Visual"
+visualTabBtn.TextColor3 = Color3.new(1, 1, 1)
+visualTabBtn.Font = Enum.Font.SourceSans
+visualTabBtn.TextScaled = true
 
--- Function to create toggle buttons
-local function createToggle(name, yPos, defaultState, callback)
-	local button = Instance.new("TextButton", mainFrame)
+local miscTabBtn = visualTabBtn:Clone()
+miscTabBtn.Text = "Misc"
+miscTabBtn.Position = UDim2.new(0.5, 0, 0, 30)
+miscTabBtn.Parent = mainFrame
+
+-- Conteúdo das abas
+local visualTab = Instance.new("Frame", mainFrame)
+visualTab.Size = UDim2.new(1, 0, 1, -60)
+visualTab.Position = UDim2.new(0, 0, 0, 60)
+visualTab.BackgroundTransparency = 1
+
+local miscTab = visualTab:Clone()
+miscTab.Visible = false
+miscTab.Parent = mainFrame
+
+-- Alternar abas
+visualTabBtn.MouseButton1Click:Connect(function()
+	visualTab.Visible = true
+	miscTab.Visible = false
+end)
+miscTabBtn.MouseButton1Click:Connect(function()
+	visualTab.Visible = false
+	miscTab.Visible = true
+end)
+
+-- Criador de toggle com salvamento
+local function createToggle(name, yPos, defaultState, callback, parent)
+	local id = "Toggle_" .. name:gsub(" ", "")
+	local state = (savedToggles[id] ~= nil) and savedToggles[id] or defaultState
+
+	local button = Instance.new("TextButton", parent)
 	button.Size = UDim2.new(1, -20, 0, 30)
 	button.Position = UDim2.new(0, 10, 0, yPos)
 	button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 	button.TextColor3 = Color3.new(1, 1, 1)
 	button.Font = Enum.Font.SourceSans
 	button.TextScaled = true
+	button.Text = name .. ": " .. (state and "ON" or "OFF")
 
-	local state = defaultState
-	button.Text = name .. ": ON"
+	callback(state)
 
 	button.MouseButton1Click:Connect(function()
 		state = not state
 		button.Text = name .. ": " .. (state and "ON" or "OFF")
 		callback(state)
+
+		savedToggles[id] = state
+		toggleRemote:InvokeServer("save", savedToggles)
 	end)
-
-	return state
 end
 
--- Create toggles
-createToggle("ESP Geral", 40, true, function(state) ESPEnabled = state end)
-createToggle("Nome", 80, true, function(state) showName = state end)
-createToggle("Distância", 120, true, function(state) showDistance = state end)
-createToggle("Tracers", 160, true, function(state) showTracers = state end)
-createToggle("Box", 200, true, function(state) showBox = state end)
+-- === Toggles VISUAL ===
+createToggle("ESP Geral",     0,   true,  function(v) ESPEnabled = v end, visualTab)
+createToggle("Nome",          40,  true,  function(v) showName = v end, visualTab)
+createToggle("Distância",     80,  true,  function(v) showDistance = v end, visualTab)
+createToggle("Tracers",       120, true,  function(v) showTracers = v end, visualTab)
+createToggle("Box",           160, true,  function(v) showBox = v end, visualTab)
+createToggle("Modo Arco-Íris",200, false, function(v) rainbowMode = v end, visualTab)
+createToggle("Cor por Time",  240, true,  function(v) colorByTeam = v end, visualTab)
 
--- ESP elements
-local function createESP(player)
-	if player == localPlayer then return end
-
-	local function onCharacterAdded(character)
-		local head = character:WaitForChild("Head")
-		local root = character:WaitForChild("HumanoidRootPart")
-
-		-- BillboardGui
-		local espGui = Instance.new("BillboardGui")
-		espGui.Name = "ESPDisplay"
-		espGui.Adornee = head
-		espGui.Size = UDim2.new(0, 100, 0, 40)
-		espGui.StudsOffset = Vector3.new(0, 2, 0)
-		espGui.AlwaysOnTop = true
-		espGui.Parent = head
-
-		local nameLabel = Instance.new("TextLabel", espGui)
-		nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
-		nameLabel.BackgroundTransparency = 1
-		nameLabel.Text = player.Name
-		nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-		nameLabel.TextScaled = true
-		nameLabel.Font = Enum.Font.SourceSansBold
-
-		local distLabel = nameLabel:Clone()
-		distLabel.Position = UDim2.new(0, 0, 0.5, 0)
-		distLabel.Text = ""
-		distLabel.Parent = espGui
-
-		-- Box ESP
-		local box = Instance.new("BoxHandleAdornment")
-		box.Adornee = root
-		box.Size = Vector3.new(4, 6, 2)
-		box.Color3 = Color3.fromRGB(255, 0, 0)
-		box.Transparency = 0.5
-		box.AlwaysOnTop = true
-		box.ZIndex = 0
-		box.Name = "ESPBox"
-		box.Parent = game:GetService("CoreGui")
-
-		-- Tracer
-		local tracerLine = Instance.new("Frame", gui)
-		tracerLine.Size = UDim2.new(0, 2, 0, 200)
-		tracerLine.BackgroundColor3 = Color3.new(1, 0, 0)
-		tracerLine.BorderSizePixel = 0
-		tracerLine.Visible = false
-		tracerLine.AnchorPoint = Vector2.new(0.5, 0)
-
-		RunService.RenderStepped:Connect(function()
-			if not character or not character.Parent then return end
-
-			local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
-
-			-- Labels
-			nameLabel.Visible = ESPEnabled and showName and onScreen
-			distLabel.Visible = ESPEnabled and showDistance and onScreen
-			box.Visible = ESPEnabled and showBox
-
-			if showDistance then
-				local dist = (root.Position - Camera.CFrame.Position).Magnitude
-				distLabel.Text = string.format("%.1f studs", dist)
-			end
-
-			-- Tracer logic
-			if ESPEnabled and showTracers and onScreen then
-				tracerLine.Visible = true
-				tracerLine.Position = UDim2.new(0, Camera.ViewportSize.X / 2, 0, Camera.ViewportSize.Y - 10)
-				local height = (Vector2.new(pos.X, pos.Y) - Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y - 10)).Magnitude
-				tracerLine.Size = UDim2.new(0, 2, 0, height)
-				tracerLine.Rotation = math.deg(math.atan2(pos.Y - (Camera.ViewportSize.Y - 10), pos.X - (Camera.ViewportSize.X / 2)))
-			else
-				tracerLine.Visible = false
-			end
-		end)
-	end
-
-	if player.Character then
-		onCharacterAdded(player.Character)
-	end
-	player.CharacterAdded:Connect(onCharacterAdded)
-end
-
--- Aplicar para todos os jogadores
-for _, p in ipairs(Players:GetPlayers()) do
-	createESP(p)
-end
-Players.PlayerAdded:Connect(createESP)
+-- === Misc (placeholder) ===
+createToggle("Exemplo OFF",   0, false, function(v) print("Misc OFF", v) end, miscTab)
